@@ -1,0 +1,73 @@
+import SwiftUI
+
+struct ARCameraModeView: View {
+    @StateObject private var cameraService = CameraPreviewService()
+
+    private var isRunningInPreview: Bool {
+        ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+    }
+
+    var body: some View {
+        ZStack {
+            if isRunningInPreview {
+                SimulatedCameraFeedView()
+            } else if cameraService.isAuthorized {
+                CameraPreviewView(session: cameraService.session)
+                    .ignoresSafeArea(edges: .bottom)
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "camera.fill")
+                        .font(.largeTitle)
+                    Text("Camera permission is required for AR Mode.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+            }
+        }
+        .onAppear {
+            cameraService.configureAndStartSession()
+        }
+        .onDisappear {
+            cameraService.stopSession()
+        }
+    }
+}
+
+private struct SimulatedCameraFeedView: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color.black, Color.gray.opacity(0.7), Color.black],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            ForEach(0..<6, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    .frame(width: 240 + CGFloat(index * 26), height: 140 + CGFloat(index * 22))
+            }
+
+            VStack(spacing: 8) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.largeTitle)
+                    .foregroundStyle(.white)
+                Text("Simulated Camera Feed")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text("Xcode Preview placeholder")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            .padding(20)
+            .background(Color.black.opacity(0.35))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .ignoresSafeArea(edges: .bottom)
+    }
+}
+
+#Preview("AR Mode") {
+    ARCameraModeView()
+}
