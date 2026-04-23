@@ -5,8 +5,6 @@ struct ARCameraModeView: View {
 
     // Scan result state
     @State private var scannedCode: String = ""
-    @State private var capturedImage: UIImage?
-
     @State private var showScanModal: Bool = false
 
     private var isRunningInPreview: Bool {
@@ -15,15 +13,18 @@ struct ARCameraModeView: View {
 
     var body: some View {
         ZStack {
+
+            // Camera feed
             if isRunningInPreview {
                 SimulatedCameraFeedView()
             } else if cameraService.isAuthorized {
                 CameraPreviewView(session: cameraService.session)
-                    .ignoresSafeArea(edges: .bottom)
+                    .ignoresSafeArea(edges: .all)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "camera.fill")
                         .font(.largeTitle)
+
                     Text("Camera permission is required for AR Mode.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
@@ -31,42 +32,49 @@ struct ARCameraModeView: View {
                 .padding()
             }
 
-            // Button overlay
+            // 🔥 LIVE RESULT OVERLAY (NEW UX)
             VStack {
-                Spacer()
+                if !scannedCode.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("📦 Barcode Detected")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
 
-                Button(action: {
-                    cameraService.capturePhotoForScanning()
-                }) {
-                    Text("Scan Barcode")
-                        .font(.headline)
-                        .padding()
-                        .frame(width: 160) // optional fixed width
-                        .background(Color.white)
-                        .foregroundStyle(.black)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        Text(scannedCode)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.top, 50)
                 }
-                .padding(.bottom, 20)
+
+                Spacer()
             }
         }
+
+        // MARK: - Live scan callback
         .onAppear {
-            cameraService.onScanWithSnapshot = { code, image in
-                print("SCANNED BARCODE CALLBACK FIRED:", code)
-                
+            cameraService.onScanWithSnapshot = { code in
+                print("📦 LIVE SCAN:", code)
+
                 DispatchQueue.main.async {
                     scannedCode = code
-                    capturedImage = image
                     showScanModal = true
                 }
             }
 
             cameraService.configureAndStartSession()
         }
+
         .onDisappear {
             cameraService.stopSession()
         }
 
-        //Modal presentation
+        // MARK: - Modal
         .sheet(isPresented: $showScanModal) {
             ScanResultModalView(
                 scannedCode: scannedCode,
@@ -78,7 +86,7 @@ struct ARCameraModeView: View {
     }
 }
 
-//Modal View
+// Modal View (unchanged)
 struct ScanResultModalView: View {
     let scannedCode: String
     let onDismiss: () -> Void
@@ -109,6 +117,7 @@ struct ScanResultModalView: View {
     }
 }
 
+// Preview fallback (unchanged)
 private struct SimulatedCameraFeedView: View {
     var body: some View {
         ZStack {
@@ -118,31 +127,19 @@ private struct SimulatedCameraFeedView: View {
                 endPoint: .bottomTrailing
             )
 
-            ForEach(0..<6, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                    .frame(width: 240 + CGFloat(index * 26), height: 140 + CGFloat(index * 22))
-            }
-
-            VStack(spacing: 8) {
+            VStack {
                 Image(systemName: "camera.viewfinder")
                     .font(.largeTitle)
                     .foregroundStyle(.white)
+
                 Text("Simulated Camera Feed")
-                    .font(.headline)
                     .foregroundStyle(.white)
-                Text("Xcode Preview placeholder")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.8))
             }
-            .padding(20)
-            .background(Color.black.opacity(0.35))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .ignoresSafeArea(edges: .bottom)
+        .ignoresSafeArea()
     }
 }
 
-#Preview("AR Mode") {
+#Preview {
     ARCameraModeView()
 }
