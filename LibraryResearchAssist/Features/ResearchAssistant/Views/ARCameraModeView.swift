@@ -51,11 +51,13 @@ struct ARCameraModeView: View {
         }
         .onAppear {
             cameraService.onScanWithSnapshot = { code, image in
-                scannedCode = code
-                capturedImage = image
-
-                //trigger modal
-                showScanModal = true
+                print("SCANNED BARCODE CALLBACK FIRED:", code)
+                
+                DispatchQueue.main.async {
+                    scannedCode = code
+                    capturedImage = image
+                    showScanModal = true
+                }
             }
 
             cameraService.configureAndStartSession()
