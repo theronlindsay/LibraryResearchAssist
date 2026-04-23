@@ -3,8 +3,11 @@ import SwiftUI
 struct ARCameraModeView: View {
     @StateObject private var cameraService = CameraPreviewService()
 
+    // Scan result state
     @State private var scannedCode: String = ""
     @State private var capturedImage: UIImage?
+
+    @State private var showScanModal: Bool = false
 
     private var isRunningInPreview: Bool {
         ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
@@ -28,25 +31,9 @@ struct ARCameraModeView: View {
                 .padding()
             }
 
+            // Button overlay
             VStack {
                 Spacer()
-
-                if !scannedCode.isEmpty {
-                    VStack(spacing: 8) {
-                        Text("Scanned Code:")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.8))
-
-                        Text(scannedCode)
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.bottom, 10)
-                }
 
                 Button(action: {
                     cameraService.capturePhotoForScanning()
@@ -54,11 +41,10 @@ struct ARCameraModeView: View {
                     Text("Scan Barcode")
                         .font(.headline)
                         .padding()
-                        .frame(maxWidth: .infinity)
+                        .frame(width: 160) // optional fixed width
                         .background(Color.white)
                         .foregroundStyle(.black)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .padding(.horizontal)
                 }
                 .padding(.bottom, 20)
             }
@@ -67,6 +53,9 @@ struct ARCameraModeView: View {
             cameraService.onScanWithSnapshot = { code, image in
                 scannedCode = code
                 capturedImage = image
+
+                //trigger modal
+                showScanModal = true
             }
 
             cameraService.configureAndStartSession()
@@ -74,6 +63,47 @@ struct ARCameraModeView: View {
         .onDisappear {
             cameraService.stopSession()
         }
+
+        //Modal presentation
+        .sheet(isPresented: $showScanModal) {
+            ScanResultModalView(
+                scannedCode: scannedCode,
+                onDismiss: {
+                    showScanModal = false
+                }
+            )
+        }
+    }
+}
+
+//Modal View
+struct ScanResultModalView: View {
+    let scannedCode: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Barcode Scanned!")
+                .font(.title)
+                .bold()
+
+            VStack(spacing: 8) {
+                Text("Result:")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+
+                Text(scannedCode)
+                    .font(.body)
+                    .multilineTextAlignment(.center)
+            }
+            .padding()
+
+            Button("Dismiss") {
+                onDismiss()
+            }
+            .padding()
+        }
+        .padding()
     }
 }
 
