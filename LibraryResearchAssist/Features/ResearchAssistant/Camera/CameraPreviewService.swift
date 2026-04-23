@@ -1,14 +1,24 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import Vision
 
-final class CameraPreviewService: ObservableObject {
+final class CameraPreviewService: NSObject, ObservableObject {
+
+    //Public
     let session = AVCaptureSession()
     @Published var isAuthorized = false
 
+    // Returns barcode + image AFTER button press
+    var onScanWithSnapshot: ((String, UIImage) -> Void)?
+
+    // MARK: - Private
     private let sessionQueue = DispatchQueue(label: "CameraSessionQueue")
     private var didConfigureSession = false
 
+    private let photoOutput = AVCapturePhotoOutput()
+
+    //Authorization + Start
     func configureAndStartSession() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -36,12 +46,26 @@ final class CameraPreviewService: ObservableObject {
         }
     }
 
+    //Manual photo capture
+    func capturePhotoForScanning() {
+        let settings = AVCapturePhotoSettings()
+        photoOutput.capturePhoto(with: settings,
+                                 delegate: PhotoCaptureDelegate { [weak self] image in
+            guard let self = self, let image = image else { return }
+            self.detectBarcode(in: image)
+        })
+    }
+
+    //Session Setup
     private func configureSessionIfNeededAndStart() {
         sessionQueue.async {
             if !self.didConfigureSession {
                 self.session.beginConfiguration()
 
-                guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+                // Camera input
+                guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera,
+                                                           for: .video,
+                                                           position: .back),
                       let input = try? AVCaptureDeviceInput(device: camera),
                       self.session.canAddInput(input) else {
                     self.session.commitConfiguration()
@@ -49,6 +73,12 @@ final class CameraPreviewService: ObservableObject {
                 }
 
                 self.session.addInput(input)
+
+                // Photo output only
+                if self.session.canAddOutput(self.photoOutput) {
+                    self.session.addOutput(self.photoOutput)
+                }
+
                 self.session.commitConfiguration()
                 self.didConfigureSession = true
             }
@@ -58,9 +88,59 @@ final class CameraPreviewService: ObservableObject {
             }
         }
     }
+
+    // Barcode Detection
+    private func detectBarcode(in image: UIImage) {
+        guard let cgImage = image.cgImage else { return }
+
+        let request = VNDetectBarcodesRequest { [weak self] request, error in
+            guard let self = self else { return }
+
+            if let results = request.results as? [VNBarcodeObservation],
+               let first = results.first,
+               let payload = first.payloadStringValue {
+
+                DispatchQueue.main.async {
+                    self.onScanWithSnapshot?(payload, image)
+                }
+            }
+        }
+
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? handler.perform([request])
+        }
+    }
 }
 
+//Photo Capture Delegate
+final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+
+    private let completion: (UIImage?) -> Void
+
+    init(completion: @escaping (UIImage?) -> Void) {
+        self.completion = completion
+    }
+
+    func photoOutput(_ output: AVCapturePhotoOutput,
+                     didFinishProcessingPhoto photo: AVCapturePhoto,
+                     error: Error?) {
+
+        guard error == nil,
+              let data = photo.fileDataRepresentation(),
+              let image = UIImage(data: data) else {
+            completion(nil)
+            return
+        }
+
+        completion(image)
+    }
+}
+
+//Preview View
 struct CameraPreviewView: UIViewRepresentable {
+
     let session: AVCaptureSession
 
     func makeUIView(context: Context) -> PreviewView {
@@ -75,8 +155,12 @@ struct CameraPreviewView: UIViewRepresentable {
     }
 }
 
+//UIKit Layer
 final class PreviewView: UIView {
-    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+
+    override class var layerClass: AnyClass {
+        AVCaptureVideoPreviewLayer.self
+    }
 
     var videoPreviewLayer: AVCaptureVideoPreviewLayer {
         guard let layer = layer as? AVCaptureVideoPreviewLayer else {

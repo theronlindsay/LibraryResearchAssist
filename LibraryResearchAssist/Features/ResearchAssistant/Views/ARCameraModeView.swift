@@ -3,6 +3,9 @@ import SwiftUI
 struct ARCameraModeView: View {
     @StateObject private var cameraService = CameraPreviewService()
 
+    @State private var scannedCode: String = ""
+    @State private var capturedImage: UIImage?
+
     private var isRunningInPreview: Bool {
         ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
     }
@@ -24,8 +27,48 @@ struct ARCameraModeView: View {
                 }
                 .padding()
             }
+
+            VStack {
+                Spacer()
+
+                if !scannedCode.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("Scanned Code:")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+
+                        Text(scannedCode)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.bottom, 10)
+                }
+
+                Button(action: {
+                    cameraService.capturePhotoForScanning()
+                }) {
+                    Text("Scan Barcode")
+                        .font(.headline)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white)
+                        .foregroundStyle(.black)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal)
+                }
+                .padding(.bottom, 20)
+            }
         }
         .onAppear {
+            cameraService.onScanWithSnapshot = { code, image in
+                scannedCode = code
+                capturedImage = image
+            }
+
             cameraService.configureAndStartSession()
         }
         .onDisappear {
