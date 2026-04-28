@@ -1,22 +1,30 @@
 import SwiftUI
 
 struct ARCameraModeView: View {
+    let isActive: Bool
     @StateObject private var cameraService = CameraPreviewService()
+    private let searchService = LibrarySearchService()
 
     // Scan result state
     @State private var scannedCode: String = ""
-    @State private var showScanModal: Bool = false
+    @State private var selectedItem: LibraryCatalogItem?
+    @State private var isSearching = false
+    @State private var searchError: String?
 
     private var isRunningInPreview: Bool {
         ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
     }
 
+    init(isActive: Bool = true) {
+        self.isActive = isActive
+    }
+
     var body: some View {
         ZStack {
-
-            // Camera feed
             if isRunningInPreview {
                 SimulatedCameraFeedView()
+            } else if cameraService.availabilityState == .multitaskingRestricted {
+                fullscreenRequiredView
             } else if cameraService.isAuthorized {
                 CameraPreviewView(session: cameraService.session)
                     .ignoresSafeArea(edges: .all)
@@ -32,11 +40,10 @@ struct ARCameraModeView: View {
                 .padding()
             }
 
-            // 🔥 LIVE RESULT OVERLAY (NEW UX)
             VStack {
                 if !scannedCode.isEmpty {
                     VStack(spacing: 8) {
-                        Text("📦 Barcode Detected")
+                        Text(isSearching ? "Searching Catalog" : "Barcode Detected")
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.8))
 
@@ -45,6 +52,18 @@ struct ARCameraModeView: View {
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
+
+                        if isSearching {
+                            ProgressView()
+                                .tint(.white)
+                        }
+
+                        if let searchError, !searchError.isEmpty {
+                            Text(searchError)
+                                .font(.footnote)
+                                .foregroundStyle(.red.opacity(0.95))
+                                .multilineTextAlignment(.center)
+                        }
                     }
                     .padding()
                     .background(Color.black.opacity(0.7))
@@ -55,69 +74,94 @@ struct ARCameraModeView: View {
                 Spacer()
             }
         }
-
-        // MARK: - Live scan callback
+        .onAppear {
+            updateCameraActivity(shouldRun: isActive)
+        }
+        .onChange(of: isActive) { _, newValue in
+            updateCameraActivity(shouldRun: newValue)
+        }
+        .onChange(of: cameraService.availabilityState) { _, newValue in
+            if newValue == .ready, isActive {
+                cameraService.configureAndStartSession()
+            }
+        }
         .onAppear {
             cameraService.onScanWithSnapshot = { code in
                 print("📦 LIVE SCAN:", code)
 
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     scannedCode = code
-                    showScanModal = true
+                    searchError = nil
+                }
+
+                Task {
+                    await searchForBarcode(code)
                 }
             }
-
-            cameraService.configureAndStartSession()
         }
-
         .onDisappear {
             cameraService.stopSession()
+            resetScannerState()
+        }
+        .fullScreenCover(item: $selectedItem) { item in
+            LibraryItemDetailView(item: item, showsRecommendationReason: false)
+        }
+    }
+
+    @MainActor
+    private func searchForBarcode(_ code: String) async {
+        guard !isSearching else { return }
+
+        isSearching = true
+        searchError = nil
+
+        do {
+            let results = try await searchService.barcodeSearch(barcode: code)
+            if let firstResult = results.first {
+                selectedItem = firstResult
+            } else {
+                searchError = "article not found in catalog"
+            }
+        } catch {
+            searchError = "article not found in catalog"
         }
 
-        // MARK: - Modal
-        .sheet(isPresented: $showScanModal) {
-            ScanResultModalView(
-                scannedCode: scannedCode,
-                onDismiss: {
-                    showScanModal = false
-                }
-            )
+        isSearching = false
+    }
+
+    @MainActor
+    private func resetScannerState() {
+        scannedCode = ""
+        selectedItem = nil
+        isSearching = false
+        searchError = nil
+    }
+
+    private func updateCameraActivity(shouldRun: Bool) {
+        if shouldRun {
+            cameraService.configureAndStartSession()
+        } else {
+            cameraService.stopSession()
+            resetScannerState()
         }
+    }
+
+    private var fullscreenRequiredView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+
+            Text("Barcode scanning requires fullscreen for the camera view to work. This is yet another example of Apple arbitrarily restricting what you can do with a device you paid for")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemBackground))
     }
 }
 
-// Modal View (unchanged)
-struct ScanResultModalView: View {
-    let scannedCode: String
-    let onDismiss: () -> Void
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Barcode Scanned!")
-                .font(.title)
-                .bold()
-
-            VStack(spacing: 8) {
-                Text("Result:")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-
-                Text(scannedCode)
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-            }
-            .padding()
-
-            Button("Dismiss") {
-                onDismiss()
-            }
-            .padding()
-        }
-        .padding()
-    }
-}
-
-// Preview fallback (unchanged)
 private struct SimulatedCameraFeedView: View {
     var body: some View {
         ZStack {

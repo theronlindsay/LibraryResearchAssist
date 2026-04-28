@@ -42,20 +42,25 @@ struct MicrocourseContainerView: View {
                 .padding(.top, 8)
                 .padding(.bottom, buttonAreaHeight)
 
-                if isAssistantVisible {
-                    AIAssistantAndARView(initialMode: .ai)
-                        .background(.regularMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color(uiColor: .separator), lineWidth: 1)
-                        }
-                        .shadow(radius: 12)
-                        .frame(width: popupWidth, height: popupHeight)
-                        .padding(.horizontal, horizontalPadding)
-                        .padding(.bottom, buttonAreaHeight)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                AIAssistantAndARView(
+                    initialMode: .assist,
+                    showsModePicker: true,
+                    isActive: isAssistantVisible
+                )
+                    .background(.regularMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color(uiColor: .separator), lineWidth: 1)
+                    }
+                    .shadow(radius: 12)
+                    .frame(width: popupWidth, height: popupHeight)
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.bottom, buttonAreaHeight)
+                    .opacity(isAssistantVisible ? 1 : 0)
+                    .offset(y: isAssistantVisible ? 0 : 24)
+                    .allowsHitTesting(isAssistantVisible)
+                    .accessibilityHidden(!isAssistantVisible)
 
                 HStack(alignment: .bottom) {
                     Button("Back") {

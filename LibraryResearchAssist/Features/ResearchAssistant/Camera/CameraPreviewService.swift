@@ -4,10 +4,16 @@ import Vision
 import Combine
 
 final class CameraPreviewService: NSObject, ObservableObject {
+    enum CameraAvailabilityState: Equatable {
+        case ready
+        case multitaskingRestricted
+        case unavailable
+    }
 
     // MARK: - Public
     let session = AVCaptureSession()
     @Published var isAuthorized = false
+    @Published var availabilityState: CameraAvailabilityState = .ready
 
     // Final output to UI
     var onScanWithSnapshot: ((String) -> Void)?
@@ -18,12 +24,18 @@ final class CameraPreviewService: NSObject, ObservableObject {
     private var didConfigureSession = false
 
     private let videoOutput = AVCaptureVideoDataOutput()
+    private var observersRegistered = false
 
-    private var lastScanTime: TimeInterval = 0
+    nonisolated(unsafe) private var lastScanTime: TimeInterval = 0
     private let scanCooldown: TimeInterval = 1.5
 
-    // MARK: - Vision Request (🔥 FROM TUTORIAL)
-    lazy var detectBarcodeRequest: VNDetectBarcodesRequest = {
+    override init() {
+        super.init()
+        registerSessionObserversIfNeeded()
+    }
+
+    // MARK: - Vision Request
+    nonisolated private func makeDetectBarcodeRequest() -> VNDetectBarcodesRequest {
         let request = VNDetectBarcodesRequest { [weak self] request, error in
             guard let self = self else { return }
 
@@ -52,7 +64,7 @@ final class CameraPreviewService: NSObject, ObservableObject {
         ]
 
         return request
-    }()
+    }
 
     // MARK: - Authorization
     func configureAndStartSession() {
@@ -60,12 +72,14 @@ final class CameraPreviewService: NSObject, ObservableObject {
 
         case .authorized:
             isAuthorized = true
+            availabilityState = .ready
             configureSessionIfNeededAndStart()
 
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { granted in
                 DispatchQueue.main.async {
                     self.isAuthorized = granted
+                    self.availabilityState = granted ? .ready : .unavailable
                 }
                 if granted {
                     self.configureSessionIfNeededAndStart()
@@ -74,6 +88,7 @@ final class CameraPreviewService: NSObject, ObservableObject {
 
         default:
             isAuthorized = false
+            availabilityState = .unavailable
         }
     }
 
@@ -93,6 +108,11 @@ final class CameraPreviewService: NSObject, ObservableObject {
                 self.session.beginConfiguration()
 
                 self.session.sessionPreset = .hd1280x720
+
+                // Allow camera capture while the app is running in a windowed iPad multitasking layout.
+                if self.session.isMultitaskingCameraAccessSupported {
+                    self.session.isMultitaskingCameraAccessEnabled = true
+                }
 
                 guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera,
                                                            for: .video,
@@ -123,8 +143,62 @@ final class CameraPreviewService: NSObject, ObservableObject {
         }
     }
 
+    private func registerSessionObserversIfNeeded() {
+        guard !observersRegistered else { return }
+        observersRegistered = true
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSessionWasInterrupted(_:)),
+            name: .AVCaptureSessionWasInterrupted,
+            object: session
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSessionInterruptionEnded(_:)),
+            name: .AVCaptureSessionInterruptionEnded,
+            object: session
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSessionRuntimeError(_:)),
+            name: .AVCaptureSessionRuntimeError,
+            object: session
+        )
+    }
+
+    @objc private func handleSessionWasInterrupted(_ notification: Notification) {
+        guard let reasonValue = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int,
+              let reason = AVCaptureSession.InterruptionReason(rawValue: reasonValue) else {
+            return
+        }
+
+        Task { @MainActor in
+            switch reason {
+            case .videoDeviceNotAvailableWithMultipleForegroundApps:
+                availabilityState = .multitaskingRestricted
+            default:
+                availabilityState = .unavailable
+            }
+        }
+    }
+
+    @objc private func handleSessionInterruptionEnded(_ notification: Notification) {
+        Task { @MainActor in
+            availabilityState = .ready
+        }
+    }
+
+    @objc private func handleSessionRuntimeError(_ notification: Notification) {
+        Task { @MainActor in
+            availabilityState = .unavailable
+        }
+    }
+
     // MARK: - Vision Processing
-    private func processClassification(for request: VNRequest) {
+    nonisolated private func processClassification(for request: VNRequest) {
 
         guard let bestResult = request.results?.first as? VNBarcodeObservation,
               let payload = bestResult.payloadStringValue else {
@@ -137,7 +211,7 @@ final class CameraPreviewService: NSObject, ObservableObject {
 
         print("✅ BARCODE:", payload)
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.onScanWithSnapshot?(payload)
         }
     }
@@ -146,9 +220,9 @@ final class CameraPreviewService: NSObject, ObservableObject {
 // MARK: - Live Frame Delegate
 extension CameraPreviewService: AVCaptureVideoDataOutputSampleBufferDelegate {
 
-    func captureOutput(_ output: AVCaptureOutput,
-                       didOutput sampleBuffer: CMSampleBuffer,
-                       from connection: AVCaptureConnection) {
+    nonisolated func captureOutput(_ output: AVCaptureOutput,
+                                   didOutput sampleBuffer: CMSampleBuffer,
+                                   from connection: AVCaptureConnection) {
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             return
@@ -159,9 +233,10 @@ extension CameraPreviewService: AVCaptureVideoDataOutputSampleBufferDelegate {
             orientation: .right,
             options: [:]
         )
+        let request = makeDetectBarcodeRequest()
 
         do {
-            try handler.perform([detectBarcodeRequest])
+            try handler.perform([request])
         } catch {
             print("❌ Vision failed:", error)
         }

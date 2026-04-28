@@ -1,52 +1,22 @@
 import SwiftUI
 
 struct SearchModeView: View {
-    @State private var promptText = ""
-    @State private var latestSubmittedPrompt = ""
+    let scope: SearchScope
+    @StateObject private var viewModel = LibrarySearchViewModel()
 
     var body: some View {
-        VStack {
-            Spacer()
-
-            if latestSubmittedPrompt.isEmpty {
-                Text("Enter a research prompt to begin.")
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(spacing: 8) {
-                    Text("Prompt queued")
-                        .font(.headline)
-                    Text(latestSubmittedPrompt)
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
+        Group {
+            switch scope {
+            case .assist:
+                AssistedSearchView(viewModel: viewModel)
+            case .catalog:
+                CatalogSearchView(viewModel: viewModel)
             }
-
-            Spacer()
         }
-        .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 10) {
-                TextField("Type a research prompt...", text: $promptText)
-                    .textFieldStyle(.roundedBorder)
-
-                Button("Send") {
-                    submitPrompt()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding()
-            .background(.ultraThinMaterial)
-        }
-    }
-
-    private func submitPrompt() {
-        // Placeholder only: future external API integration point.
-        latestSubmittedPrompt = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
-        promptText = ""
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
 #Preview("Search Mode") {
-    SearchModeView()
+    SearchModeView(scope: .assist)
 }

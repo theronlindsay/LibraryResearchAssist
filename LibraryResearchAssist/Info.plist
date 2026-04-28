@@ -2,6 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>LibraryAPIBaseURL</key>
+	<string>https://albertsons-library-ai-api.vercel.app</string>
+	<key>x-app-key</key>
+	<string>17be0faf7bc28090879e8fcb8276399018f5c8ef06361d18901e06b237390159</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
