@@ -160,8 +160,10 @@ class ARCoordinator: NSObject {
         mapManager.removeCurrentMap()
         portalManager.removeAllPortals()
         
-        arState.interactionState = .placingMap
-        arState.showPlacementPrompt = true
+        DispatchQueue.main.async { [weak self] in
+            self?.arState.interactionState = .placingMap
+            self?.arState.showPlacementPrompt = true
+        }
     }
     
     // MARK: - Helpers

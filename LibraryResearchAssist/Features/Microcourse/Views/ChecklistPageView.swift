@@ -32,17 +32,21 @@ struct ChecklistPageView: View {
                             .font(bodyFont)
                     }
                 }
-                Button {
-                    if let action = page.pageAction,
-                       action.actionType == .custom,
-                       let id = action.customActionID {
-                        onCustomAction(id)
+                if let action = page.pageAction {
+                    Button {
+                        if let id = action.customActionID {
+                            onCustomAction(id)
+                        } else if action.actionType != .none {
+                            onCustomAction(action.actionType.rawValue)
+                        }
+                    } label: {
+                        Label(
+                            action.title,
+                            systemImage: action.systemImage ?? "sparkles"
+                        )
                     }
-                } label: {
-                    Label(
-                        page.pageAction?.title ?? "",
-                        systemImage: page.pageAction?.systemImage ?? "sparkles"
-                    )
+                    .buttonStyle(.bordered)
+                    .padding(.top, 8)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -71,7 +71,7 @@ struct MicrocourseContainerView: View {
                             case "launchResearchAssistant":
                                 showResearchAssistant = true
 
-                            case "showBonusContent":
+                            case "showBonusContent", "playMedia":
                                 showBonus = true
 
                             default:
