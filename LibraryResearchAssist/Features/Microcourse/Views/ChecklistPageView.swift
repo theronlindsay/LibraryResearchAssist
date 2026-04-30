@@ -11,6 +11,8 @@ struct ChecklistPageView: View {
     private var bodyFont: Font {
         horizontalSizeClass == .regular ? .title3 : .body
     }
+    
+    let onCustomAction: (String) -> Void
 
     var body: some View {
         ScrollView {
@@ -30,6 +32,18 @@ struct ChecklistPageView: View {
                             .font(bodyFont)
                     }
                 }
+                Button {
+                    if let action = page.pageAction,
+                       action.actionType == .custom,
+                       let id = action.customActionID {
+                        onCustomAction(id)
+                    }
+                } label: {
+                    Label(
+                        page.pageAction?.title ?? "",
+                        systemImage: page.pageAction?.systemImage ?? "sparkles"
+                    )
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -47,7 +61,10 @@ struct ChecklistPageView: View {
                 "Set date filters",
                 "Review abstracts"
             ]
-        )
+        ),
+        onCustomAction: { actionID in
+            print("Preview custom action: \(actionID)")
+        }
     )
     .padding()
 }

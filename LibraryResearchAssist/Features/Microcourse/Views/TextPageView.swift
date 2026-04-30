@@ -11,6 +11,8 @@ struct TextPageView: View {
     private var bodyFont: Font {
         horizontalSizeClass == .regular ? .title3 : .body
     }
+    
+    let onCustomAction: (String) -> Void
 
     var body: some View {
         ScrollView {
@@ -23,6 +25,19 @@ struct TextPageView: View {
                     .font(bodyFont)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Button {
+                if let action = page.pageAction,
+                   action.actionType == .custom,
+                   let id = action.customActionID {
+                    onCustomAction(id)
+                }
+            } label: {
+                Label(
+                    page.pageAction?.title ?? "",
+                    systemImage: page.pageAction?.systemImage ?? "sparkles"
+                )
+            }
         }
     }
 }
@@ -33,7 +48,9 @@ struct TextPageView: View {
             title: "Preview: Welcome",
             pageType: .text,
             bodyText: "This is a preview of a text lesson page."
-        )
+        ), onCustomAction: { actionID in
+            print("Preview custom action: \(actionID)")
+        }
     )
     .padding()
 }

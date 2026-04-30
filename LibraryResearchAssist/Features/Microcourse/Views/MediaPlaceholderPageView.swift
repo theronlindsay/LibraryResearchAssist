@@ -11,6 +11,7 @@ struct MediaPlaceholderPageView: View {
     private var bodyFont: Font {
         horizontalSizeClass == .regular ? .title3 : .body
     }
+    let onCustomAction: (String) -> Void
 
     var body: some View {
         VStack(spacing: 12) {
@@ -37,6 +38,19 @@ struct MediaPlaceholderPageView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        
+        Button {
+            if let action = page.pageAction,
+               action.actionType == .custom,
+               let id = action.customActionID {
+                onCustomAction(id)
+            }
+        } label: {
+            Label(
+                page.pageAction?.title ?? "",
+                systemImage: page.pageAction?.systemImage ?? "sparkles"
+            )
+        }
     }
 }
 
@@ -46,7 +60,9 @@ struct MediaPlaceholderPageView: View {
             title: "Preview: Media",
             pageType: .media,
             bodyText: "Media preview area for future video and interactive blocks."
-        )
+        ), onCustomAction: { actionID in
+            print("Preview custom action: \(actionID)")
+        }
     )
     .padding()
 }
